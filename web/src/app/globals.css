@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+/* Design tokens (mockup values arrive in F2a). Use logical utilities only: ms-/me-/ps-/pe-/start-/end-/text-start. */
+@theme {
+  --color-brand: #e70101;
+  --color-ink: #1c0f0f;
+  --font-sans: "Manrope", "Segoe UI", system-ui, sans-serif;
+}
+
+:root {
+  color-scheme: light dark;
+}
+
+body {
+  background: light-dark(#ffffff, #0f1115);
+  color: light-dark(var(--color-ink), #e8eaee);
+}

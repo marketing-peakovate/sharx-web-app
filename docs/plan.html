@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SHARKX CRM plan</title>
+<style>
+:root{color-scheme:light dark;--bg:#f6f7f9;--card:#fff;--ink:#16181d;--mut:#5b6472;--line:#e3e6ec;--wk:#f0f2f6;--today:#fff3c4;--out:#ece6fb;--hard:#fdf1e7;--todo:#8f98a6;--doing:#2563eb;--done:#16a34a;--blocked:#dc2626;--ms:#e11d48;--warn:#f59e0b;--col:66px;--lab:150px}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1115;--card:#171a21;--ink:#e8eaee;--mut:#9aa3b2;--line:#272c37;--wk:#1c2029;--today:#3b3313;--out:#251e36;--hard:#2c2117;--todo:#646c7a;--doing:#4f8dff;--done:#2fb463;--blocked:#ef5b5b;--ms:#fb7185;--warn:#fbbf24}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{padding:20px 16px 40px;max-width:100%}
+h1{font-size:19px;margin:0 0 4px}
+h2{font-size:14px;margin:26px 0 8px}
+.sub{color:var(--mut);margin:0 0 12px}
+.legend{display:flex;flex-wrap:wrap;gap:14px;align-items:center;color:var(--mut);font-size:12.5px;margin-bottom:10px}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-inline-end:5px;vertical-align:-1px}
+.scroll{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:12px}
+.tl{display:grid;grid-template-columns:var(--lab) repeat(28,var(--col));min-width:max-content;position:relative}
+.lab{position:sticky;left:0;z-index:5;background:var(--card);border-inline-end:1px solid var(--line);border-bottom:1px solid var(--line);padding:8px 10px;font-weight:650;font-size:12.5px;display:flex;align-items:center}
+.lab small{display:block;font-weight:500;color:var(--mut)}
+.hd{border-bottom:1px solid var(--line);border-inline-start:1px solid var(--line);padding:6px 4px;text-align:center;font-size:11.5px;line-height:1.25}
+.hd b{display:block;font-size:12.5px}
+.hd span{color:var(--mut)}
+.bg{border-inline-start:1px solid var(--line);border-bottom:1px solid var(--line);z-index:0}
+.wk{background:var(--wk)}
+.hard{background:var(--hard)}
+.out{background:repeating-linear-gradient(135deg,var(--out) 0 7px,transparent 7px 14px)}
+.today{background:var(--today)!important;box-shadow:inset 0 0 0 2px var(--warn)}
+.msl{border-inline-end:2px dashed var(--ms)}
+.bar{z-index:2;margin:4px 2px;height:36px;align-self:center;border-radius:7px;padding:3px 7px;color:#fff;font-size:11.5px;line-height:1.3;overflow:hidden;background:var(--todo);cursor:default}
+.bar .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar .t b{margin-inline-end:4px}
+.bar .d{display:flex;gap:3px;flex-wrap:nowrap;overflow:hidden}
+.dep{background:rgba(0,0,0,.28);border-radius:4px;padding:0 4px;font-size:10.5px;white-space:nowrap}
+.dep.par{background:var(--warn);color:#1b1300}
+.s-doing{background:var(--doing)}.s-done{background:var(--done)}.s-blocked{background:var(--blocked)}
+.thin{height:20px;padding:1px 7px;font-size:11px;background:transparent;color:var(--ink);border:1px dashed var(--mut)}
+.thin.spec{border-style:solid;background:var(--todo);color:#fff}
+.thin.spec.s-doing{background:var(--doing)}.thin.spec.s-done{background:var(--done)}.thin.spec.s-blocked{background:var(--blocked)}
+.pt{z-index:3;align-self:center;font-size:11px;font-weight:650;color:var(--ms);white-space:nowrap;padding:0 4px;overflow:visible}
+.rg{z-index:2;margin:4px 2px;align-self:center;border-radius:6px;padding:3px 8px;font-size:11.5px;font-weight:600;border:1px solid var(--line);background:var(--hard)}
+.rg.outside{background:var(--out);border-style:dashed}
+.tables{display:grid;grid-template-columns:repeat(auto-fit,minmax(460px,1fr));gap:16px}
+table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;font-size:12.5px}
+th,td{text-align:start;padding:5px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--mut);font-weight:600;background:var(--wk)}
+tr.w td{background:var(--wk)}
+tr.o td{color:var(--mut)}
+td.ship{font-weight:600}
+td code{font:11.5px ui-monospace,Menlo,Consolas,monospace}
+</style>
+</head>
+<body>
+<main>
+  <h1>SHARKX Agency CRM · build plan</h1>
+  <p class="sub" id="sub"></p>
+  <div class="legend" id="legend"></div>
+  <div class="scroll"><div class="tl" id="tl"></div></div>
+  <div class="tables" id="tables"></div>
+</main>
+<script src="plan-data.js"></script>
+<script src="../tracker/tracker-data.js" onerror="window.TRACKER=null"></script>
+<script>
+(function () {
+  'use strict';
+  var P = window.PLAN, T = window.TRACKER || null;
+  if (!P) { document.getElementById('sub').textContent = 'plan-data.js not found.'; return; }
+  var DAY = 864e5, N = P.days, start = Date.parse(P.start + 'T00:00:00Z');
+  var tl = document.getElementById('tl');
+  var byId = {}; P.specs.forEach(function (s) { byId[s.id] = s; });
+  var subs = {};
+  if (T && T.features) T.features.forEach(function (f) { f.subs.forEach(function (s) { subs[s.id] = s; }); });
+
+  function el(t, c, x) { var e = document.createElement(t); if (c) e.className = c; if (x != null) e.textContent = x; return e; }
+  function date(d) { return new Date(start + (d - 1) * DAY); }
+  function fmt(d, o) { return date(d).toLocaleDateString('en-GB', Object.assign({ timeZone: 'UTC' }, o)); }
+  function wk(d) { var w = date(d).getUTCDay(); return w === 0 || w === 6; }
+  var now = new Date();
+  var today = Math.floor((Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) - start) / DAY) + 1;
+  var lines = {}; P.milestones.forEach(function (m) { if (m.day) lines[m.day] = 1; });
+  function zone(d) { return d > P.buildDays ? ' out' : d > P.buildDays - 3 ? ' hard' : wk(d) ? ' wk' : ''; }
+  function status(s) {
+    var ss = (s.subs || []).map(function (id) { return subs[id]; }).filter(Boolean);
+    if (!ss.length) return 'todo';
+    if (ss.some(function (x) { return x.status === 'blocked'; })) return 'blocked';
+    if (ss.every(function (x) { return x.status === 'done'; })) return 'done';
+    if (ss.some(function (x) { return x.status !== 'todo' || x.pct > 0; })) return 'doing';
+    return 'todo';
+  }
+  function who(o) { return o === 'Both' ? 'Both' : P.devs[o]; }
+  function place(e, c1, c2, r1, span) {
+    e.style.gridColumn = (c1 + 1) + ' / ' + (c2 + 2);
+    e.style.gridRow = r1 + ' / span ' + (span || 1);
+    tl.appendChild(e);
+  }
+  function background(row, span) {
+    for (var d = 1; d <= N; d++) {
+      var c = el('div', 'bg' + zone(d) + (d === today ? ' today' : '') + (lines[d] ? ' msl' : ''));
+      place(c, d, d, row, span);
+    }
+  }
+  function pack(items) {
+    var ends = [];
+    items.sort(function (a, b) { return a.startDay - b.startDay || String(a.id || a.name).localeCompare(String(b.id || b.name)); });
+    items.forEach(function (it) {
+      var r = ends.findIndex(function (e) { return e < it.startDay; });
+      if (r < 0) { r = ends.length; ends.push(0); }
+      ends[r] = it.endDay; it._row = r;
+    });
+    return Math.max(1, ends.length);
+  }
+
+  document.getElementById('sub').textContent = 'Dev A: Pipes = ' + P.devs.A + ' · Dev B: Product = ' + P.devs.B +
+    ' · Day 1 = ' + fmt(1, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) +
+    ' · build Days 1–' + P.buildDays + ', UAT Days ' + (P.buildDays + 1) + '–' + N + (T ? ' · status from tracker' : ' · no tracker data: all grey');
+  var lg = document.getElementById('legend');
+  [['todo', 'todo'], ['doing', 'doing'], ['done', 'done'], ['blocked', 'blocked']].forEach(function (x) {
+    var s = el('span'); var i = el('i'); i.style.background = 'var(--' + x[0] + ')'; s.append(i, document.createTextNode(x[1])); lg.append(s);
+  });
+  lg.append(el('span', '', '⧗ X = waits for the other dev\'s spec X (amber: overlaps, build on fixtures)'),
+    el('span', '', 'shaded = weekend · striped = outside the 21-day build'));
+
+  // header
+  var row = 1;
+  place(el('div', 'lab', 'Day'), 0, -1, row);
+  tl.lastChild.style.gridColumn = '1';
+  for (var d = 1; d <= N; d++) {
+    var h = el('div', 'hd' + zone(d) + (d === today ? ' today' : '') + (lines[d] ? ' msl' : ''));
+    h.append(el('b', '', 'D' + d), el('span', '', fmt(d, { day: 'numeric', month: 'short' })), el('br'), el('span', '', fmt(d, { weekday: 'short' })));
+    place(h, d, d, row);
+  }
+  row++;
+
+  // milestones (row 1: points, row 2: ranges)
+  var ml = el('div', 'lab', 'Milestones'); ml.style.gridColumn = '1'; ml.style.gridRow = row + ' / span 2'; tl.appendChild(ml);
+  background(row, 2);
+  P.milestones.forEach(function (m) {
+    if (m.day) { var p = el('div', 'pt', '◆ ' + m.label); p.title = 'Day ' + m.day + ' · ' + fmt(m.day, { weekday: 'short', day: 'numeric', month: 'short' }); place(p, m.day, m.day, row); }
+    else { var g = el('div', 'rg' + (m.kind === 'outside' ? ' outside' : ''), m.label); g.title = 'Days ' + m.from + '–' + m.to; place(g, m.from, m.to, row + 1); }
+  });
+  row += 2;
+
+  function lane(title, note, items, thin) {
+    var n = pack(items);
+    var l = el('div', 'lab'); l.append(document.createTextNode(title)); if (note) l.append(el('small', '', note));
+    l.style.gridColumn = '1'; l.style.gridRow = row + ' / span ' + n; l.style.flexDirection = 'column'; l.style.alignItems = 'flex-start'; l.style.justifyContent = 'center';
+    tl.appendChild(l);
+    background(row, n);
+    items.forEach(function (it) {
+      var st = it.id ? status(it) : 'todo';
+      var b = el('div', 'bar' + (thin ? ' thin' : '') + (thin && it.id ? ' spec' : '') + (it.id ? ' s-' + st : ''));
+      var t = el('div', 't');
+      if (it.id) t.append(el('b', '', it.id));
+      t.append(document.createTextNode(it.name));
+      b.append(t);
+      var tip = (it.id ? it.id + ' · ' : '') + it.name + ' · ' + who(it.owner || 'Both') + ' · Days ' + it.startDay + '–' + it.endDay +
+        (it.release ? ' · Release ' + it.release : '') + (it.id ? ' · ' + st : '');
+      if (it.id && !thin) {
+        var dd = el('div', 'd');
+        (it.dependsOn || []).forEach(function (id) {
+          var dep = byId[id];
+          if (!dep || dep.owner === it.owner || dep.owner === 'Both' || it.owner === 'Both') return;
+          var par = dep.endDay >= it.startDay;
+          var x = el('span', 'dep' + (par ? ' par' : ''), '⧗ ' + id);
+          x.title = 'waits for ' + id + ' ' + dep.name + ' (' + who(dep.owner) + ', ends Day ' + dep.endDay + ')' + (par ? ' · overlaps: build on fixtures' : '');
+          dd.append(x);
+          tip += ' · waits for ' + id;
+        });
+        if (dd.childNodes.length) b.append(dd);
+      }
+      b.title = tip;
+      place(b, it.startDay, it.endDay, row + it._row);
+    });
+    row += n;
+  }
+
+  var shared = P.specs.filter(function (s) { return s.owner === 'Both'; }).concat((P.shared || []).map(function (s) { return Object.assign({ owner: 'Both' }, s); }));
+  lane('Shared', 'joint work', shared, true);
+  lane('Dev A: Pipes', P.devs.A, P.specs.filter(function (s) { return s.owner === 'A'; }));
+  lane('Dev B: Product', P.devs.B, P.specs.filter(function (s) { return s.owner === 'B'; }));
+
+  // day-by-day tables
+  var tables = document.getElementById('tables');
+  ['A', 'B'].forEach(function (o) {
+    var wrap = el('div');
+    wrap.append(el('h2', '', P.devs[o] + ' · Dev ' + o + (o === 'A' ? ': Pipes' : ': Product') + ' · day by day'));
+    var tb = el('table'), th = el('thead'), hr = el('tr');
+    ['Day', 'Date', 'What to ship', 'Specs'].forEach(function (x) { hr.append(el('th', '', x)); });
+    th.append(hr); tb.append(th);
+    var body = el('tbody');
+    for (var d = 1; d <= N; d++) {
+      var act = P.specs.filter(function (s) { return (s.owner === o || s.owner === 'Both') && s.startDay <= d && s.endDay >= d; });
+      var tr = el('tr', (d > P.buildDays ? 'o' : '') + (wk(d) ? ' w' : ''));
+      var ship = act.filter(function (s) { return s.endDay === d; });
+      var what = act.length ? act.map(function (s) { return s.name + (s.endDay === d ? ' ✓' : ' (cont.)'); }).join('; ') : '—';
+      tr.append(el('td', '', 'D' + d), el('td', '', fmt(d, { weekday: 'short', day: 'numeric', month: 'short' })),
+        el('td', ship.length ? 'ship' : '', what));
+      var c = el('td'); c.append(el('code', '', act.map(function (s) { return s.id; }).join(', ')));
+      tr.append(c);
+      body.append(tr);
+    }
+    tb.append(body); wrap.append(tb); tables.append(wrap);
+  });
+})();
+</script>
+</body>
+</html>

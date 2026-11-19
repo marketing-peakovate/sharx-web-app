@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: api
+    services:
+      postgres:
+        image: postgres:18.7-alpine
+        env:
+          POSTGRES_USER: sharkx
+          POSTGRES_PASSWORD: sharkx
+          POSTGRES_DB: sharkx_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U sharkx -d sharkx_test"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      # CI-only values, not secrets. Real secrets live in Railway, never here.
+      NODE_ENV: test
+      APP_ENV: local
+      APP_URL: http://localhost:3000
+      DATABASE_URL: postgres://sharkx:sharkx@localhost:5432/sharkx_test
+      TEST_DATABASE_URL: postgres://sharkx:sharkx@localhost:5432/sharkx_test
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: api/package.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: api/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Lint (Biome)
+        run: pnpm exec biome ci .
+      - name: Unit and DB tests (Vitest)
+        run: pnpm test
+      - name: Audit production dependencies
+        # TODO(F15a): make blocking once the dependency set is stable.
+        continue-on-error: true
+        run: pnpm audit --prod
+
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+    env:
+      NODE_ENV: test
+      APP_ENV: local
+      APP_URL: http://localhost:3000
+      API_URL: http://localhost:4000
+      SESSION_SECRET: ci-only-session-secret-not-used-anywhere
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: web/package.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - name: Contracts copy is in sync
+        working-directory: .
+        run: node scripts/sync-contracts.mjs --check
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Lint (Biome + logical CSS)
+        run: pnpm exec biome ci . && node scripts/check-logical-css.mjs
+      - name: Unit tests (Vitest)
+        run: pnpm test
+      - name: Audit production dependencies
+        # TODO(F15a): make blocking once the dependency set is stable.
+        continue-on-error: true
+        run: pnpm audit --prod
+
+  # Single required status check for branch protection.
+  verify:
+    if: always()
+    needs: [api, web]
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          test "${{ needs.api.result }}" = "success" && test "${{ needs.web.result }}" = "success"

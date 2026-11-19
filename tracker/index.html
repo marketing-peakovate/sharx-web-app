@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Build tracker</title>
+<style>
+:root{color-scheme:light dark;--bg:#f5f6f8;--card:#fff;--ink:#16181d;--mut:#5b6472;--line:#e1e4ea;--track:#e6e9ef;--todo:#8a93a2;--doing:#2563eb;--done:#16a34a;--blocked:#dc2626}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1115;--card:#171a21;--ink:#e8eaee;--mut:#9aa3b2;--line:#262b36;--track:#2a303c;--todo:#7d8594;--doing:#5b9bff;--done:#34c26b;--blocked:#f26a6a}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:1180px;margin:0 auto;padding:20px 16px 40px}
+h1{font-size:18px;margin:0 0 14px}
+h2{font-size:13px;margin:22px 0 8px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.bar{height:10px;border-radius:99px;background:var(--track);overflow:hidden}
+.bar i{display:block;height:100%;border-radius:99px;background:var(--todo);transition:width .4s}
+.bar i.doing{background:var(--doing)}.bar i.done{background:var(--done)}.bar i.blocked{background:var(--blocked)}
+.overall{display:flex;align-items:center;gap:14px}
+.overall .bar{flex:1;height:14px}
+.big{font-size:22px;font-weight:700;min-width:64px;text-align:right}
+.meta{color:var(--mut);font-size:12.5px;margin-top:6px}
+.now{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin-top:12px;border-left:4px solid var(--doing)}
+.now b{font-weight:650}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:12px;align-items:start}
+details.card{background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+details.card>summary{list-style:none;cursor:pointer;padding:12px 14px;display:grid;grid-template-columns:1fr auto;gap:6px 10px}
+details.card>summary::-webkit-details-marker{display:none}
+.fid{font-weight:700;margin-right:6px}
+.owner{font-size:11.5px;color:var(--mut);border:1px solid var(--line);border-radius:99px;padding:0 7px;margin-inline-start:6px}
+.pct{font-weight:700}
+summary .bar{grid-column:1/-1}
+.rows{border-top:1px solid var(--line)}
+.row{display:grid;grid-template-columns:auto 1fr auto;gap:2px 10px;padding:8px 14px;border-bottom:1px solid var(--line);align-items:center}
+.row:last-child{border-bottom:0}
+.badge{font-size:11px;font-weight:650;padding:1px 8px;border-radius:99px;color:#fff;background:var(--todo);text-transform:uppercase;letter-spacing:.03em}
+.badge.doing{background:var(--doing)}.badge.done{background:var(--done)}.badge.blocked{background:var(--blocked)}
+.note{grid-column:2/-1;color:var(--mut);font-size:12.5px}
+ul{list-style:none;margin:0;padding:0}
+li{display:flex;gap:10px;padding:5px 0;border-bottom:1px solid var(--line)}
+li:last-child{border-bottom:0}
+li time{color:var(--mut);min-width:72px;font-size:12.5px}
+</style>
+</head>
+<body>
+<main>
+  <h1>Build tracker</h1>
+  <div class="panel">
+    <div class="overall"><div class="bar" id="obar"></div><div class="big" id="opct">0%</div></div>
+    <div class="meta" id="ometa"></div>
+    <div class="now panel" id="now"></div>
+  </div>
+  <h2>Features</h2>
+  <div class="grid" id="cards"></div>
+  <h2>Recent activity</h2>
+  <div class="panel"><ul id="log"></ul></div>
+</main>
+<script>
+(function () {
+  'use strict';
+  var OPEN = new Set();
+  var $ = function (s) { return document.querySelector(s); };
+  function el(t, c, x) { var e = document.createElement(t); if (c) e.className = c; if (x != null) e.textContent = x; return e; }
+  function pct(f) { var n = f.subs.length; return n ? Math.round(f.subs.reduce(function (a, s) { return a + s.pct; }, 0) / n) : 0; }
+  function state(f) {
+    if (f.subs.some(function (s) { return s.status === 'blocked'; })) return 'blocked';
+    if (f.subs.length && f.subs.every(function (s) { return s.status === 'done'; })) return 'done';
+    if (f.subs.some(function (s) { return s.status !== 'todo' || s.pct > 0; })) return 'doing';
+    return 'todo';
+  }
+  function ago(iso) {
+    var s = Math.max(0, Math.floor((Date.now() - new Date(iso)) / 1000));
+    if (s < 60) return s + 's ago';
+    var m = Math.floor(s / 60); if (m < 60) return m + 'm ago';
+    var h = Math.floor(m / 60); if (h < 24) return h + 'h ago';
+    return Math.floor(h / 24) + 'd ago';
+  }
+  function bar(p, cls) {
+    var b = el('div', 'bar');
+    b.setAttribute('role', 'progressbar');
+    b.setAttribute('aria-valuemin', 0); b.setAttribute('aria-valuemax', 100); b.setAttribute('aria-valuenow', p);
+    var i = el('i', cls || ''); i.style.width = p + '%'; b.appendChild(i);
+    return b;
+  }
+  function render(T) {
+    var fs = T.features || [], subs = [], blocked = 0, done = 0;
+    fs.forEach(function (f) { f.subs.forEach(function (s) { subs.push(s); if (s.status === 'blocked') blocked++; if (s.status === 'done') done++; }); });
+    var overall = fs.length ? Math.round(fs.reduce(function (a, f) { return a + pct(f); }, 0) / fs.length) : 0;
+    $('#obar').replaceChildren(bar(overall, overall === 100 ? 'done' : 'doing').firstChild);
+    $('#opct').textContent = overall + '%';
+    $('#ometa').textContent = done + ' of ' + subs.length + ' sub-features done' + (blocked ? ' · ' + blocked + ' blocked' : '');
+
+    var la = T.lastActivity || {};
+    $('#now').replaceChildren(
+      el('span', '', 'Now working on:'),
+      el('b', '', T.now || '—'),
+      el('span', 'meta', la.time ? 'last activity ' + (la.file || '') + ' · ' + ago(la.time) : '')
+    );
+
+    var cards = fs.map(function (f) {
+      var p = pct(f), st = state(f);
+      var d = el('details', 'card');
+      d.open = OPEN.has(f.id);
+      d.addEventListener('toggle', function () { if (d.open) OPEN.add(f.id); else OPEN.delete(f.id); });
+      var sum = el('summary');
+      var title = el('div');
+      title.append(el('span', 'fid', f.id), document.createTextNode(f.name), el('span', 'owner', f.owner || '—'));
+      sum.append(title, el('div', 'pct', p + '%'), bar(p, st));
+      var rows = el('div', 'rows');
+      f.subs.forEach(function (s) {
+        var r = el('div', 'row');
+        r.append(el('span', 'badge ' + s.status, s.status), el('span', '', s.id + ' ' + s.name), el('span', 'pct', s.pct + '%'));
+        if (s.note) r.append(el('span', 'note', s.note + ' · ' + f.owner));
+        rows.append(r);
+      });
+      d.append(sum, rows);
+      return d;
+    });
+    $('#cards').replaceChildren.apply($('#cards'), cards);
+
+    var log = (T.log || []).slice(-10).reverse().map(function (e) {
+      var li = el('li'); li.append(el('time', '', ago(e.t)), el('span', '', e.m)); return li;
+    });
+    $('#log').replaceChildren.apply($('#log'), log);
+  }
+  function load() {
+    var s = document.createElement('script');
+    s.src = 'tracker-data.js?t=' + Date.now();
+    s.onload = function () { s.remove(); if (window.TRACKER) render(window.TRACKER); };
+    s.onerror = function () { s.remove(); $('#now').textContent = 'tracker-data.js not found. Run: node scripts/track.js seed'; };
+    document.head.appendChild(s);
+  }
+  load();
+  setInterval(load, 5000);
+})();
+</script>
+</body>
+</html>

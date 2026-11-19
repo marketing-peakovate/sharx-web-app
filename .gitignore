@@ -1,0 +1,32 @@
+# dependencies
+node_modules/
+
+# next.js / build
+.next/
+out/
+build/
+next-env.d.ts
+*.tsbuildinfo
+
+# env: every .env* file except the committed template
+.env*
+!.env.example
+
+# tests
+coverage/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# logs and OS
+*.log
+.DS_Store
+Thumbs.db
+
+# local editor / tools
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.dist/
+tracker/*.tmp

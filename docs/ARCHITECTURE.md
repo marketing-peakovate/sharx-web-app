@@ -1,0 +1,177 @@
+# ARCHITECTURE · SHARKX Agency CRM
+
+Features and acceptance: `docs/PRD.md`. Rules, ownership, conventions: `CLAUDE.md`.
+
+## 1 Stack
+| Layer | Choice | Notes |
+|---|---|---|
+| Runtime | Node 26.13.1 LTS, pnpm 10.34.9 (one per app, no root workspace) | Pinned in `.nvmrc`, each app's `engines` and `packageManager`. Fallback Node 24 if Railway can't build 26 |
+| Web (`web`) | Next.js 16.4.6 (App Router), React 19.3.1, TypeScript 6.0.3 strict | UI + BFF only, no DB access. Cache Components OFF. TS 7.0 exists but Next needs an experimental flag for it |
+| API (`api`) | Fastify 5.12.8 on Node native TypeScript | Domain logic, DB/RLS, webhooks, OAuth callbacks, public form endpoint |
+| Worker (`api`) | pg-boss 12.38.2, same code as the api, separate process | Needs Node ≥22.12, Postgres ≥13 |
+| Shared contracts | Zod 4.6.7 schemas; source `api/src/contracts`, generated copy `web/src/contracts` | `node scripts/sync-contracts.mjs`; CI fails if the copy is stale |
+| UI | Tailwind 4.3.5 (logical properties), Radix (`radix-ui` 1.8.1), dnd-kit, hand-rolled SVG charts | Mockup tokens; Manrope + Noto Sans Arabic |
+| Data | Postgres 18.7, Drizzle ORM 0.45.4 + drizzle-kit 0.31.11 | RLS policies as SQL in migrations |
+| Libraries | next-intl 4.15.1, SWR, libphonenumber-js, Papaparse | Added in the spec that first needs them |
+| Email | Resend SDK, plain TS templates (EN/AR/FR) | |
+| Crypto | Node built-in `scrypt`, `crypto` (AES-256-GCM, sha256) | No native modules |
+| Quality | Biome 2.6.8, Vitest 5.1.1, Playwright 1.65.1, GitHub Actions | |
+
+Exact versions are pinned in each `package.json` and the lockfile. No other dependency without approval.
+
+## 2 Topology and deployment
+- Railway project `sharkx-crm`, region Europe West (Amsterdam); environments `staging`, `production`.
+- Services (one repo; each service's Railway root directory is its app folder): `web` (`web/railway.json`: Next.js UI + BFF), `api` (`api/railway.json`: Fastify backend; runs migrations pre-deploy), `worker` (`api/railway.worker.json`: pg-boss, api code), Postgres. Watch paths `/web/**` and `/api/**` so a change in one app doesn't redeploy the other.
+- Traffic: browser → `web` only. `web` → `api` over Railway private networking (`API_URL`). Public `api` domain only for platform webhooks, OAuth callbacks and the website form endpoint.
+- Domains: `app.<domain>` and `leads.<domain>` → `web` (proxy on the leads host allows only `/l/*`); `api.<domain>` → `api`.
+- Public HTTPS staging URLs from day 1 (Meta/Google webhooks and OAuth callbacks need them).
+- CI (GitHub Actions, required on PRs to `main`): jobs `api` and `web`, each: install `--frozen-lockfile` → typecheck → Biome → Vitest (api with a Postgres service) → `pnpm audit --prod` (non-blocking for now); web also checks the contracts copy. Aggregate required check: `verify`.
+- CD: Railway GitHub integration with wait-for-CI. `main` → staging automatically; production promoted manually after UAT. Healthchecks: web `/api/health` (checks api + db), api `/health` (checks db). Steps: `docs/ENVIRONMENTS.md`.
+- Backups: Railway Postgres backups on (verify availability day 1) + one restore drill before production.
+- Residency: Railway has no UAE region. Single connection-string config so a later move is config + data migration.
+
+## 3 Folder structure
+```
+web/                     frontend only: Next.js UI + BFF (no DB access)
+  src/app/[locale]/(auth)/   login, code, reset, accept-invite
+  src/app/[locale]/(app)/    clients home, p/[projectId]/{overview,inbox,leads,contacts,pipeline,tasks,reports,integrations,settings}, agency settings, audit
+  src/app/l/[token]/         client lead link (leads host only)
+  src/app/api/               BFF route handlers: health, events (polling), export, portal
+  src/components/  src/lib/{env,i18n,api}  src/proxy.ts
+  src/contracts/             GENERATED copy of api/src/contracts (never edit)
+  messages/{en,ar,fr}/<module>.json
+  tests/e2e/                 Playwright (starts api + web)
+  scripts/                   logical-CSS check
+  railway.json  playwright.config.ts  package.json  .env.example
+api/                     backend only: Fastify + worker
+  src/routes/            HTTP routes (internal for web; public: webhooks, oauth, forms, health)
+  src/modules/<domain>/  index.ts (public API) · schema.ts · service.ts · routes.ts · *.test.ts
+    auth audit projects leads contacts pipeline tasks automation whatsapp
+    conversion client-link reports notifications webhooks
+    integrations/{meta,google,tiktok,linkedin,snapchat,website,csv,hub}
+  src/contracts/         Zod schemas shared with web (source of truth, frozen day 1)
+  src/db/                client, schema barrel, migrator, migrations/ (single lane)
+  src/lib/{env,log,tenant,email,crypto,errors,rate-limit}
+  src/worker/            pg-boss entry + queue registry
+  tests/{setup,fixtures}
+  docker/  docker-compose.yml  railway.json  railway.worker.json  drizzle.config.ts  package.json  .env.example
+docs/                    PRD, ARCHITECTURE, ENVIRONMENTS, CONTACT-SHARKX, plan.html
+  specs/                 STATUS, ORDER, CONTRACTS, one file per spec
+  inputs/                SOW, requirements, mockup (read-only references)
+scripts/  tracker/       tracker CLI and dashboard · contracts sync script
+.github/workflows/       CI
+```
+- Layering: web (pages, Server Actions, BFF route handlers) → HTTP → api routes → `modules/*/service.ts` → `src/db`. The worker calls the same services in-process. The browser never calls the api directly.
+- Spec paths: `src/app/api/**` in specs means api routes (`api/src/routes`); other `src/app/**`, `src/components/**`, `messages/**` mean `web/...`; other `src/**` means `api/src/...`; `src/contracts` means `api/src/contracts`.
+
+## 4 Data model and RLS
+Tenant = `project` (client). Every tenant table has `project_id uuid not null`.
+- **Access:** users, sessions, auth_tokens (invite|reset|email_code; hashed, expiry, attempts), project_members, audit_log (append-only), rate_limits.
+- **Core:** projects (timezone, business_hours), pipeline_stages, contacts (unique project_id + phone_e164), leads (status new|mql|sql|not_qualified, reason, stage_id, owner_id, source, campaign, form_id, answers jsonb, is_test, external_id), lead_events (timeline), notes, tasks.
+- **Integrations:** integrations (status, account, last_data_at), integration_tokens (AES-GCM), lead_forms (mapping jsonb), webhook_events (payload, processed_at).
+- **WhatsApp:** wa_numbers, wa_conversations, wa_messages (direction; origin customer|app|history).
+- **Client link:** client_links (token_hash, can_mark, can_export, revoked_at), qualification_settings (definitions, reasons).
+- **Conversion:** conversion_mappings, conversion_events (id = Meta event_id; state; attempts).
+- **Ops:** automation_rules, notifications, change_feed (bigserial, polling), error_log.
+- `project_members` and the RLS policies live in `lib/tenant` (owner A).
+
+**RLS**
+- Roles: `app_migrator` (table owner, migrations only), `app_user` (web requests), `app_system` (worker, webhooks, portal). Runtime roles own no tables and lack BYPASSRLS; tenant tables use ENABLE + FORCE ROW LEVEL SECURITY.
+- Each request/job runs in one transaction that calls `set_config('app.user_id' | 'app.role' | 'app.project_id', …, true)` (transaction-local, safe with pooled connections). Unset → policies match nothing.
+- Row visible if `project_id` ∈ the user's project_members, or role = admin, or `project_id = app.project_id` (system/portal context).
+- `audit_log`: INSERT-only grants. Password hashes and tokens are read only inside `modules/auth`.
+- Two pools (`DATABASE_URL_APP`, `DATABASE_URL_SYSTEM`); helpers `withTenant(session, fn)` and `withSystem(projectId, fn)`.
+- Isolation suite per tenant table: user of project A cannot read or write project B; unset context returns zero rows.
+
+**Rules**
+- Contact 1—N lead. A new submission matches the contact by phone (else email); it merges into the open lead's timeline (status ≠ not_qualified), otherwise opens a new lead.
+- Idempotency: webhook_events (provider, external_id) unique; wa_messages.wa_message_id unique; leads (project, source, external_id) unique; conversion_events (lead, status_seq, platform) unique.
+- Time: UTC `timestamptz`; shown in the project's IANA zone (Asia/Dubai, Africa/Casablanca).
+
+## 5 Contracts
+`src/contracts/` (Zod; frozen day 1; changes by PR with the other dev's review):
+- `ingestLead(input)` → `{leadId, contactId, created, merged}`. Input: projectId, source, externalId?, formId?, campaign?, name?, phone?, email?, answers{}, attribution{fbclid, gclid, utm…}, receivedAt, isTest?.
+- `recordMessage(input)` → `{messageId, duplicate}`. Input: projectId, numberId, waMessageId, direction, phone, ts, type, text?, origin.
+- `statusChanged` → `{leadId, projectId, from, to, by{kind,id}, at}`; written to the conversion outbox in the same transaction.
+- `can(user, action, projectId?)` → boolean; actions enumerated in the contract file.
+- `GET /api/events?since=<n>` → `{cursor, changes[{kind, projectId, id}]}`; the client refetches changed resources (intervals: PRD F14).
+
+HTTP: api public routes `/webhooks/{meta,google,tiktok,linkedin,snapchat}`, `/forms/:key`, `/oauth/:platform/callback`, `/health`; api internal routes are called only by web (session token forwarded). Web BFF route handlers: `/api/health`, `/api/events`, `/api/export/[kind]`, `/api/portal/*` (leads host). Everything else in web is Server Components/Actions.
+
+Jobs (pg-boss, `singletonKey` for idempotency):
+| Queue | Trigger | Retry |
+|---|---|---|
+| webhook.process | webhook stored | 5×, backoff |
+| wa.history.sync | onboarding done | resumable chunks, must finish ≤24 h |
+| conversion.send | statusChanged | 8×, exponential from 10 s (first send ≤60 s) |
+| integration.health | cron 5 min | none |
+| automation.timer | delayed (no-reply 15 min, unreviewed 48 h) | 3× |
+| task.reminder | delayed to due_at | 3× |
+| email.send | any | 5× |
+| csv.import | upload | none; row errors reported |
+| maintenance | cron daily: prune change_feed, rate_limits, expired tokens | none |
+
+Exhausted jobs → `error_log` + alert email.
+
+## 6 Auth and sessions
+- Email + password: scrypt (N=2^15, r=8, p=1, per-user salt), ≥12 chars. Invite = single-use link (72 h) to set a password; reset link 1 h; tokens 256-bit, stored as sha256.
+- 2FA: after the password, a 6-digit emailed code (hashed, 10 min, 5 attempts); session stays `pending_2fa` until verified. TOTP is an Extra.
+- Session: opaque 256-bit token (sha256 in DB); `__Host-` cookie, HttpOnly, Secure, SameSite=Lax; rotated on login and 2FA; idle 12 h, absolute 7 d; revoked on password change.
+- Rate limits (Postgres): login 5/15 min per email+IP; code verify 5 per code; code send 3/10 min; reset 3/h; forms and portal per IP.
+- CSRF: Server Actions same-origin check; cookie-authenticated route handlers verify Origin; webhooks use signatures only.
+- Headers: CSP, HSTS, `X-Content-Type-Options`, `Referrer-Policy`, `frame-ancestors 'none'`.
+- Client link: random 256-bit token, hashed, constant-time compare, no cookies, per-IP rate limit.
+
+## 7 Integrations
+Adapter (`modules/integrations/<platform>`): `connectDescriptor` (steps/fields for B's generic wizard), `handleWebhook` or `poll` → `ingestLead`, `health`, `refresh`. Recorded payloads in `fixtures/`; every adapter is built fixture-first.
+| Platform | Inbound | Outbound | Access gate | Until live |
+|---|---|---|---|---|
+| WhatsApp | Cloud API webhooks (messages, history, app-sent echoes) | none | SHARKX business verification; Tech Provider; App Review Advanced access for messaging + management (screen recording per permission, submit ≈D8–9); client QR scan; app ≥2.24.17, ≥7 days active | Meta test number + fixtures |
+| Meta Lead Ads | `leadgen` webhook → Graph retrieve | Conversions API | Same verification; lead-retrieval permissions via App Review | Lead testing tool; CAPI `test_event_code` |
+| Google | Lead-form webhook (key) | Data Manager API (OAuth + Data Manager scope; no developer token) | Google Ads admin + linked conversion action | Fixtures |
+| TikTok | Webhook / poll | none | Developer app + review (terms unclear) | Fixtures |
+| LinkedIn | Lead Sync API poll / notifications | none | Application via app Products tab; no response SLA; legal entity + verified Page | Fixtures |
+| Snapchat | Marketing API webhook / poll | none | Org Admin on the ad account | Fixtures |
+| Website | `POST /api/forms/[key]` | none | none | n/a |
+| CSV | upload (in memory) | none | none | n/a |
+
+- WhatsApp limits to design for: one history sync per onboarding within 24 h (else offboard and redo); the app must be opened about every 13–14 days or the link drops; groups not synced; companion apps unlink; Embedded Signup v4 (v2 deprecated). Unofficial WhatsApp tools are barred by the SOW.
+- Google Ads API no longer accepts new offline-conversion adopters (2026-06-15), so conversions go through the Data Manager API only.
+- Hub labels each adapter Live / Fixture-verified / Awaiting access.
+
+## 8 Security, config, ops
+- Env: Railway variables per environment; `.env.example` committed; `lib/env.ts` Zod-validates at boot (fail fast).
+- Tokens: AES-256-GCM, key `TOKEN_ENC_KEY` (32-byte base64) with key-id prefix for rotation; decrypted only in adapters and senders.
+- Logging: JSON to stdout with request id, no PII. `error_log` table + alert email (rate-limited, one per fingerprint per hour) to the alert inbox.
+- `/api/health`: 200/503 JSON `{db, queue, integrations{platform: state}, lastWebhookAt}`; no secrets or PII.
+- `is_test` leads are excluded from reports, conversion and exports by default.
+- Dependencies: lockfile committed; `pnpm audit --prod` in CI.
+
+## 9 Key decisions
+| Decision | Why |
+|---|---|
+| Two independent projects in one repo: `web/` (Next.js BFF) and `api/` (Fastify); no root package or workspace | Clean frontend/backend split; each deploys from its own folder with its own lockfile; backend reusable later |
+| Contracts: source in `api`, generated copy in `web` | Railway builds each service from its own folder, so no cross-folder imports; a CI check keeps the copy in sync |
+| BFF: Server Components/Actions in web call the api over private networking | Browser never sees the api; sessions stay server-side |
+| Worker in `api`, separate Railway service | Same domain code; heavy jobs never slow API responses |
+| Node native TypeScript for api/worker (no build step) | Fewer tools; requires explicit `.ts` imports and erasable syntax |
+| Drizzle + transaction-local RLS settings | DB-level isolation (SOW) that is safe with pooling |
+| pg-boss over BullMQ | Transactional enqueue (no lost conversion events); one less service |
+| Polling over WebSocket | "Within seconds" met with no sticky infra |
+| Hand-rolled auth + emailed-code 2FA | Fits RLS and audit; fewest dependencies; TOTP deferred |
+| Contact 1—N lead | Profile holds every lead; duplicates merge into the open lead |
+| Fixture-first adapters | Approvals are outside our control; code complete by D18, live when access lands |
+| Europe West (Amsterdam) | Best latency for UAE + Morocco among Railway regions |
+| Cache Components off | Tenant data must never be cached across users |
+| Statuses New/MQL/SQL/Not qualified | SOW; Won/Junk are Extras |
+| Biome only | One tool, one config |
+
+## 10 SOW deviations (written SHARKX approval requested; see `docs/CONTACT-SHARKX.md`)
+| SOW §4–5 | Plan | Why |
+|---|---|---|
+| WebSocket live updates | Polling `/api/events` | Same behaviour, one less service |
+| Redis + BullMQ | pg-boss on Postgres | One less service and bill; transactional enqueue |
+| Cloudflare R2 | Not used at launch | CSV processed in memory; no files to store |
+| Sentry + uptime alerts | `/api/health` + `error_log` + emailed alerts | Simpler, in-house; covers the alert inbox (Client Requirements #7) |
+| Two-factor sign-in | Emailed 6-digit code | Simplest compliant 2FA; authenticator app is an Extra |
+| DB "can move to a UAE region" | Launch in Amsterdam; Railway has no UAE region | Residency deferred; SHARKX informed |
