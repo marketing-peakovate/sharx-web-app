@@ -16,7 +16,7 @@ SHARKX staff sign in with password + emailed code, are invited by email, and eve
 
 ## Files touched
 - A (Alex): src/modules/auth/*, src/lib/email/*, src/lib/crypto/*
-- B (John): src/app/[locale]/(auth)/* screens (login, code, reset, accept invite), built by Alex as a PR that John reviews
+- B (John): src/app/[locale]/(auth)/* screens (login, code, reset, accept invite), built by Alex in its own commit that John looks over
 
 ## Dependencies
 F1b. (Resend domain may not be verified yet: use Conalytic's sending domain on staging.)

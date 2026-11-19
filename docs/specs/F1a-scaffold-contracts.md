@@ -5,14 +5,14 @@ Owner: Both (Alex leads, John reviews contracts) · Days 1–1 · Release 1 · T
 Repo, toolchain, environments and frozen contracts exist so Alex and John build in parallel from Day 1.
 
 ## Acceptance criteria
-- [ ] `/api/health` reports DB, queue, each integration, last webhook time (checks stubbed until F1d/F14a).
-- [ ] CI: typecheck, Biome, Vitest (Postgres), audit; required before merge.
+- [ ] The api's `/health` reports DB, queue, each integration, last webhook time (checks stubbed until F1d/F14a). Web `/api/health` stays reachability only.
+- [ ] CI: typecheck, Biome, Vitest (Postgres), audit; runs on every push to `main`; staging deploys only after green CI.
 - [ ] Staging auto-deploys from `main`; production promoted manually.
 
 ## Data model / API / job changes
 - No tables (F1b). `api/src/contracts/` mirrors `docs/specs/CONTRACTS.md` exactly; `web/src/contracts/` is its generated copy.
 - `lib/env.ts` validates every env var at boot.
-- Railway project `sharkx-crm`, Europe West; environments staging/production; services web, worker, Postgres; public staging URL.
+- Railway project `sharkx-crm`, Europe West; environments staging/production; services web, api, worker, Postgres; public staging URL.
 - Node gate: Railway build + CI on Node 26; on failure pin Node 24 and note it in ARCHITECTURE §1.
 - pnpm scripts exactly as listed in CLAUDE.md.
 

@@ -25,7 +25,7 @@ Exact versions are pinned in each `package.json` and the lockfile. No other depe
 - Traffic: browser → `web` only. `web` → `api` over Railway private networking (`API_URL`). Public `api` domain only for platform webhooks, OAuth callbacks and the website form endpoint.
 - Domains: `app.<domain>` and `leads.<domain>` → `web` (proxy on the leads host allows only `/l/*`); `api.<domain>` → `api`.
 - Public HTTPS staging URLs from day 1 (Meta/Google webhooks and OAuth callbacks need them).
-- CI (GitHub Actions, required on PRs to `main`): jobs `api` and `web`, each: install `--frozen-lockfile` → typecheck → Biome → Vitest (api with a Postgres service) → `pnpm audit --prod` (non-blocking for now); web also checks the contracts copy. Aggregate required check: `verify`.
+- CI (GitHub Actions, runs on every push to `main`; developers also run `node scripts/verify.mjs` before pushing): jobs `api` and `web`, each: install `--frozen-lockfile` → typecheck → Biome → Vitest (api with a Postgres service) → `pnpm audit --prod` (non-blocking for now); web also checks the contracts copy. Aggregate required check: `verify`.
 - CD: Railway GitHub integration with wait-for-CI. `main` → staging automatically; production promoted manually after UAT. Healthchecks: web `/api/health` (checks api + db), api `/health` (checks db). Steps: `docs/ENVIRONMENTS.md`.
 - Backups: Railway Postgres backups on (verify availability day 1) + one restore drill before production.
 - Residency: Railway has no UAE region. Single connection-string config so a later move is config + data migration.
@@ -89,7 +89,7 @@ Tenant = `project` (client). Every tenant table has `project_id uuid not null`.
 - Time: UTC `timestamptz`; shown in the project's IANA zone (Asia/Dubai, Africa/Casablanca).
 
 ## 5 Contracts
-`src/contracts/` (Zod; frozen day 1; changes by PR with the other dev's review):
+`src/contracts/` (Zod; frozen day 1; changes in their own `contracts:` commit, announced to the other dev):
 - `ingestLead(input)` → `{leadId, contactId, created, merged}`. Input: projectId, source, externalId?, formId?, campaign?, name?, phone?, email?, answers{}, attribution{fbclid, gclid, utm…}, receivedAt, isTest?.
 - `recordMessage(input)` → `{messageId, duplicate}`. Input: projectId, numberId, waMessageId, direction, phone, ts, type, text?, origin.
 - `statusChanged` → `{leadId, projectId, from, to, by{kind,id}, at}`; written to the conversion outbox in the same transaction.

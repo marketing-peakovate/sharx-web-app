@@ -21,19 +21,19 @@ Two independent projects, each with its own `package.json`, lockfile and `node_m
 - **api** (`cd api`): `pnpm dev` (:4000) · `pnpm dev:worker` · `pnpm start` · `pnpm start:worker` · `pnpm db:generate` · `pnpm db:migrate` · `pnpm db:studio` (`db:seed` arrives in F4a)
 - **web** (`cd web`): `pnpm dev` (:3000) · `pnpm build` · `pnpm start` · e2e: `pnpm build && pnpm test:e2e` (starts api + web)
 - In either app: `pnpm test` (Vitest; api needs the Docker Postgres) · `pnpm typecheck` · `pnpm lint` (Biome; web adds the logical-CSS check) · `pnpm format` · `pnpm check`
-- Gate: `pnpm verify` (typecheck + lint + test) in **both** `api/` and `web/` before every push; CI runs the same plus the contracts sync check.
+- Gate before every push (repo root): `node scripts/verify.mjs` (`--all` = both apps). It runs `pnpm verify` (typecheck + lint + test) in the apps you changed and the contracts sync check; CI repeats it on every push to `main`.
 
 ## Layers and ownership
 
 - web (pages, Server Actions, BFF route handlers; no DB) → HTTP via `web/src/lib/api` → api routes → `api/src/modules/<domain>/service.ts` → `api/src/db`. Worker calls the same services. Browser never calls the api.
 - Spec paths map: `src/app/api/**` → `api/src/routes`; other `src/app/**`, `src/components/**`, `messages/**` → `web/`; other `src/**` → `api/src/`; `src/contracts` → `api/src/contracts` (web gets a generated copy).
 - Imports: relative with explicit `.ts`/`.tsx` extension (api/worker run on Node's native TypeScript); `@/` alias only inside `web`. Erasable syntax only (no enums/namespaces).
-- One owner per path. Use another owner's module only through its `index.ts`; change it only by PR to them.
+- One owner per path. Use another owner's module only through its `index.ts`; change it only after telling them, in its own commit.
 - **Dev A "Pipes" (Alex):** `api/src/{db,worker,routes}`, `api/src/lib/*`, api `modules/{auth,audit,webhooks,whatsapp,conversion}`, `modules/integrations/*`, `api/railway*.json`, `api/docker-compose.yml`, CI.
 - **Dev B "Product" (John):** all of `web` (pages, components, i18n, messages, BFF client) and api `modules/{leads,contacts,pipeline,tasks,automation,client-link,reports,projects,notifications}`.
-- **Shared:** `api/src/contracts` (Zod; owner proposes, the other reviews). Never edit `web/src/contracts` (generated): after any change run `node scripts/sync-contracts.mjs`. Also the `api/src/db/schema/index.ts` barrel (append-only).
-- Single migration lane: schema lives in `modules/<x>/schema.ts`, migrations only in `api/src/db/migrations`; run `db:generate` only after rebasing on `main`; merge migration PRs the day they open; never edit a merged migration.
-- Git: trunk-based; branches `a/<topic>`, `b/<topic>`; PR ≤ ~400 lines; same-day merge; rebase daily; `main` always deployable.
+- **Shared:** `api/src/contracts` (Zod; owner proposes and tells the other dev before pushing). Never edit `web/src/contracts` (generated): after any change run `node scripts/sync-contracts.mjs`. Also the `api/src/db/schema/index.ts` barrel (append-only).
+- Single migration lane: schema lives in `modules/<x>/schema.ts`, migrations only in `api/src/db/migrations`; run `db:generate` only after `git pull --rebase`; push migration commits the same day they are generated; never edit a pushed migration.
+- Git: no PRs; small commits pushed straight to `main`, message prefix `<spec-id>: ...` (e.g. `F1a: add session contract`). Before every push: `git pull --rebase`, then `node scripts/verify.mjs` (runs verify in the apps you changed + contracts sync); push only when it passes. Contract changes go in their own `contracts:` commit and you tell the other dev. `main` must always be green: if CI goes red, fix it first.
 
 ## Conventions
 
@@ -45,7 +45,7 @@ Two independent projects, each with its own `package.json`, lockfile and `node_m
 - Names: DB snake_case plural tables; TS camelCase; components PascalCase; files kebab-case; UUID ids; UTC `timestamptz`; IANA time zones.
 - Biome is the only linter/formatter. Tests beside code (`*.test.ts`); fixtures in `tests/fixtures`.
 - Logs: JSON to stdout with request id; never PII.
-- Done per PR: `pnpm verify` green · `can()` + audit · strings in catalog · RTL checked · no new dependency.
+- Done per push: `node scripts/verify.mjs` passes · `can()` + audit · strings in catalog · RTL checked · no new dependency.
 
 ## Never
 
@@ -58,7 +58,7 @@ Two independent projects, each with its own `package.json`, lockfile and `node_m
 - No physical-direction Tailwind (`ml-`, `pl-`, `left-`, `text-left`); no hard-coded UI strings.
 - No edits outside your owned paths, or in `contracts/`, without the other dev.
 - No `db:migrate` against production from a laptop; no hand-editing merged migrations.
-- No direct commits to `main`; no skipping CI or hooks.
+- No push to `main` before `node scripts/verify.mjs` passes; no force-push; no leaving CI red.
 
 ## Tracker (tracker/)
 

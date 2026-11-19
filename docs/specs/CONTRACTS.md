@@ -2,7 +2,7 @@
 
 Shared between **Alex (Dev A, Pipes)** and **John (Dev B, Product)** so both build in parallel from Day 1. Mirrored as Zod in `api/src/contracts` (spec F1a); `web/src/contracts` is a generated copy (`node scripts/sync-contracts.mjs`, never edited by hand).
 - Layout: `web` (Next.js BFF) calls `api` (Fastify) over HTTP; §4 functions run inside the api (and worker). Each web-facing api endpoint gets a Zod request/response schema in `api/src/contracts`, added by the spec that needs it. Path mapping for specs: CLAUDE.md "Layers and ownership".
-- After Day 1: additive changes only (new optional field, new enum value), by PR approved by both. Renames/removals need both devs and an ARCHITECTURE update.
+- After Day 1: additive changes only (new optional field, new enum value), in a `contracts:` commit that both devs have agreed to. Renames/removals need both devs and an ARCHITECTURE update.
 - Notation: `?` = optional, `uuid`, `iso` = ISO-8601 UTC string, `e164` = `+9715…`.
 
 ## 1 Session and permissions

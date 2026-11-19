@@ -25,7 +25,7 @@
 1. Add it with a comment to the right `.env.example` (`web` or `api`).
 2. Add it to that app's `src/lib/env.ts` schema (required or optional, per environment if needed).
 3. Set it in Railway for **staging and production** on every service that reads it (api and worker share most).
-4. If tests need it, add a dummy value to `.github/workflows/ci.yml`. Mention it in the PR.
+4. If tests need it, add a dummy value to `.github/workflows/ci.yml`. Mention it in the commit message.
 
 ## Rotate a secret
 1. Generate a new value (e.g. `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`).
@@ -36,7 +36,7 @@
 ## Manual setup steps (you, in the UIs)
 **GitHub**
 1. Create a private repository (Conalytic or SHARKX organisation) and push `main`.
-2. Settings → Rules → Rulesets → new branch ruleset for `main`: require a pull request, require status check **`verify`** (aggregates the `api` and `web` CI jobs), require branches to be up to date, block force pushes and deletions.
+2. Settings → Rules → Rulesets → new branch ruleset for `main`: **only** block force pushes and deletions. Do **not** require pull requests or status checks: the team pushes straight to `main`, and those rules would block that. The gates are `node scripts/verify.mjs` before each push, CI after it, and Railway's "Wait for CI" so staging only deploys green commits.
 3. Actions: keep enabled for the repository; no secrets needed now.
 
 **Railway** (SHARKX's Pro account, Conalytic invited as admin)

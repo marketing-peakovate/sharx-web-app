@@ -15,7 +15,7 @@ Status changes also reach Google Ads, and each client controls which statuses ar
 
 ## Files touched
 - A (Alex): src/modules/conversion/google/*, tests/fixtures/google-dm/*
-- B (John): settings page src/app/[locale]/(app)/p/[projectId]/settings/feedback/*, built by Alex as a PR that John reviews
+- B (John): settings page src/app/[locale]/(app)/p/[projectId]/settings/feedback/*, built by Alex in its own commit that John looks over
 
 ## Dependencies
 F11a.

@@ -16,7 +16,7 @@ Each client opens one secure link, without logging in, and sees only its own lea
 - WhatsApp column shows No chat / Awaiting reply / Replied only.
 
 ## Files touched
-- B (John): src/modules/client-link/*, src/app/l/[token]/*, middleware host rules (PR reviewed by Alex), messages/en/portal.json
+- B (John): src/modules/client-link/*, src/app/l/[token]/*, middleware host rules (own commit, Alex looks it over), messages/en/portal.json
 
 ## Dependencies
 F2a, F1b.

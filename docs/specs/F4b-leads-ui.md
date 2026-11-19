@@ -16,7 +16,7 @@ The team finds, filters, qualifies, assigns and exports leads, and sees each per
 
 ## Files touched
 - B (John): src/app/[locale]/(app)/p/[projectId]/{leads,contacts}/*, src/components/leads/*, src/modules/leads/*, messages/en/leads.json
-- A (Alex): src/app/api/export/[kind] shell (John adds the leads query via PR)
+- A (Alex): src/app/api/export/[kind] shell (John adds the leads query in his own commit)
 
 ## Dependencies
 F4a, F2a.

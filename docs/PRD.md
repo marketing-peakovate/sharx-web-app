@@ -27,7 +27,7 @@
 - Invite by email → single-use set-password link (72 h) → sign in with password + 6-digit emailed code (10 min, 5 tries). Reset by link (1 h).
 - Roles per matrix. Manager/Agent read zero rows from other clients via UI, actions, API and polling (isolation suite proves it).
 - Every mutation, sign-in event, integration connect/disconnect and client mark writes an audit row. Admin filters by user, action, client, date.
-- `/api/health` reports DB, queue, each integration, last webhook time.
+- The api's `/health` reports DB, queue, each integration, last webhook time. The web `/api/health` only reports web + api reachability.
 - Failed jobs retry with backoff; exhausted jobs send an alert email.
 
 ### F2
@@ -129,7 +129,7 @@
 
 ### F15
 **Testing, deploy, handover** · A + B · SOW: testing, deployment, handover (14h)
-- CI: typecheck, Biome, Vitest (Postgres), audit; required before merge. Staging auto-deploys from `main`; production promoted manually.
+- CI: typecheck, Biome, Vitest (Postgres), audit; runs on every push to `main` (devs run `node scripts/verify.mjs` first). Staging auto-deploys from `main` only after green CI (Railway "Wait for CI"); production promoted manually.
 - Tests: isolation + permission suite, webhook signature and idempotency, adapter fixtures, 6 Playwright flows; manual UAT checklist.
 - Seed/demo data from the mockup (5 clients, ~64 leads).
 - Backups on; restore drill passed before production.
