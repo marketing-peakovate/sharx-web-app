@@ -1,9 +1,11 @@
 name: CI
 
+# CI is PAUSED (manual trigger only) until GitHub Actions billing is sorted out.
+# To re-enable: replace `workflow_dispatch:` with the two lines below.
+#   pull_request:
+#   push: { branches: [main] }
 on:
-  pull_request:
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}

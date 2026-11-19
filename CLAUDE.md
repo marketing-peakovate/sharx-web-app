@@ -9,7 +9,7 @@ Multi-client CRM for ad agency SHARKX: capture leads → follow up → client ma
 - `docs/specs/STATUS.md`: F-ids and sub-features. `docs/CONTACT-SHARKX.md`: client-facing note.
 - Specs: `docs/specs/<id>-*.md` (one per spec), `docs/specs/CONTRACTS.md` (frozen shared shapes), `docs/specs/ORDER.md` (build order, days).
 - Timeline: docs/plan.html (data in docs/plan-data.js)
-- `docs/inputs/`: SOW, mockup (UI truth), requirements. Open only to settle a conflict.
+- `docs/inputs/` (local only, git-ignored; get it from Vansh): SOW, mockup (UI truth), requirements. Open only to settle a conflict.
 
 ## Stack (details: ARCHITECTURE §1)
 
@@ -58,7 +58,7 @@ Two independent projects, each with its own `package.json`, lockfile and `node_m
 - No physical-direction Tailwind (`ml-`, `pl-`, `left-`, `text-left`); no hard-coded UI strings.
 - No edits outside your owned paths, or in `contracts/`, without the other dev.
 - No `db:migrate` against production from a laptop; no hand-editing merged migrations.
-- No push to `main` before `node scripts/verify.mjs` passes; no force-push; no leaving CI red.
+- No push to `main` before `node scripts/verify.mjs` passes; no force-push. GitHub CI is paused (billing), so that script is the only gate.
 
 ## Tracker (tracker/)
 

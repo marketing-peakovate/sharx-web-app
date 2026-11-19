@@ -46,7 +46,7 @@
    - `web` → root `/web`, config `/web/railway.json`, watch `/web/**`
    - `api` → root `/api`, config `/api/railway.json`, watch `/api/**`
    - `worker` → root `/api`, config `/api/railway.worker.json`, watch `/api/**`
-4. Deploy triggers: **staging**: branch `main`, automatic deploys on, "Wait for CI" on. **production**: automatic deploys **off**; deploy a staging-verified commit by hand.
+4. Deploy triggers: **staging**: branch `main`, automatic deploys on, "Wait for CI" **off while GitHub CI is paused** (turn it on again when CI is re-enabled in `.github/workflows/ci.yml`). **production**: automatic deploys **off**; deploy a staging-verified commit by hand.
 5. Variables (set separately in each environment):
    - `api`: `NODE_ENV=production`, `APP_ENV`, `LOG_LEVEL=info`, `PORT=8080`, `APP_URL` (web URL), `DATABASE_URL=${{Postgres.DATABASE_URL}}`, `RESEND_API_KEY`, `EMAIL_FROM`, `ALERT_EMAIL`
    - `worker`: `NODE_ENV=production`, `APP_ENV`, `LOG_LEVEL=info`, `DATABASE_URL=${{Postgres.DATABASE_URL}}`, `RESEND_API_KEY`, `EMAIL_FROM`, `ALERT_EMAIL`
